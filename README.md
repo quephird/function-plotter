@@ -26,6 +26,7 @@ More on this below.
 
 * Moving of the camera using the mouse
 * Zooming in and out using the mouse wheel
+* Toggling of the gridlines and the surface fill
 
 ## Caveats
 
@@ -71,7 +72,6 @@ If anyone has any ideas on what I'm doing wrong here or how to workaround what a
 * User input of mathematical function to be plotted
 * User input of x and y ranges
 * User input of the surface color
-* Ability to turn a surface grid on/off
 * Ability to tweak the number of plot points
 
 ## Useful links

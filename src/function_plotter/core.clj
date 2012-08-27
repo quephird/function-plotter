@@ -1,7 +1,8 @@
 (ns function-plotter.core
   (:gen-class)
   (:import [processing.core PConstants]
-           [java.awt.event MouseWheelListener])
+           [java.awt.event ActionListener MouseWheelListener]
+           [javax.swing JButton JCheckBox JFrame JPanel])
   (:use quil.core quil.applet)
   )
 
@@ -9,7 +10,7 @@
 (def screen-h 500)
 
 (def steps 50)
-(def scale-z 200)
+(def scale-z 600)
 
 (def start-x -3.0)
 (def end-x 3.0)
@@ -27,8 +28,16 @@
 ;(def zoom-z -300)
 (def zoom-z (atom -2000))
 
+(def grid-on (atom true))
+(def grid-color (atom [0 127 0]))
+(def fill-on (atom true))
+(def fill-color (atom [127 0 127]))
+
 (defn f [x y]
-  (Math/sin (+ (* x x) (* y y))))
+;  (Math/sin (+ (* x x) (* y y))))
+  (/ (Math/sin (+ (* x x) (* y y))) (+ (* x x) (* y y)))
+  )
+
 
 (defn- compute-points []
   (let [range-x (- end-x start-x)
@@ -43,6 +52,7 @@
       )
     )
   )
+
 (defn- mouse-pressed []
   (reset! last-x (mouse-x))
   (reset! last-y (mouse-y))
@@ -66,9 +76,19 @@
     (swap! zoom-z - 50))
   )
 
+(defn- check-grid []
+  (if @grid-on
+    (apply stroke @grid-color)
+    (no-stroke)))
+
+(defn- check-fill []
+  (if @fill-on
+    (apply fill @fill-color)
+    (no-fill)))
+
 (defn setup []
   (smooth)
-  (no-fill)
+  ; TODO: Move this down into the setup of the GUI below
   (let [applet (current-applet)
         mouse-wheel-listener (proxy [java.awt.event.MouseWheelListener] []
                                (mouseWheelMoved [mwe] (mouse-wheel (.getWheelRotation mwe)))
@@ -80,9 +100,8 @@
 
 (defn- draw-function-plot []
   (lights)
-  (stroke 255)
-  (no-stroke)
-  (fill 127 127 0)
+  (check-grid)
+  (check-fill)
 
   (let [range-x (- end-x start-x)
         range-y (- end-y start-y)]
@@ -111,7 +130,7 @@
 
 (defn draw []
   (background 0)
-  ; We center the results on window
+  ; Center the results on window
   (translate (/ screen-w 2) (/ screen-h 2) @zoom-z)
 
   ; Rotation
@@ -123,25 +142,60 @@
 
   ; Function covers
   ; 400 x 400 x scaleZ
-  ; NOTA BENE: quil only exposes two arities of scale so we
-  ;            need to dive into Java here.
+  ; NOTA BENE: quil only exposes two arities of scale so we need to dive into Java here.
   (.scale (current-applet) screen-w screen-h scale-z)
-  ;(scale screen-w screen-h scale-z)
 
   (draw-function-plot)
   (draw-axes)
   )
 
 (defn -main [& args]
-  (defsketch plotter
-    :title "function plot"
-    :setup setup
-    :draw draw
-    :renderer :opengl
-    :mouse-pressed mouse-pressed
-    :mouse-dragged mouse-dragged
-    :mouse-released mouse-released
-    :size [500 500]
+  ; I need to get a hold of the raw PApplet object here
+  ; in order to be able to add to a JPanel.
+  ; And I need to dump into Swing in the first place
+  ; because Processing does not come bundled with any widgets
+  ; and openly discourages adding AWT or Swing components
+  ; to PApplets. There are a few Processing libraries that
+  ; have been developed to allow for direct addition of widgets
+  ; to PApplets, but alas... there is no way to automate inclusion
+  ; of those dependencies via Processing or Leiningen. Ugh.
+  ;
+  ; TODO: Take a look at Seesaw. There is waaaay too much ceremony here.
+  ;       In the mean time, IT FRIGGIN' WORKS.
+  (let [plotter (applet :setup setup
+                        :draw draw
+                        :renderer :opengl
+                        :mouse-pressed mouse-pressed
+                        :mouse-dragged mouse-dragged
+                        :mouse-released mouse-released
+                        :size [500 500]
+                        :target :none
+                  )
+        fill-toggle (JCheckBox. "Toggle fill" @fill-on)
+        fill-toggle-listener (proxy [java.awt.event.ActionListener] []
+                               (actionPerformed [ae]
+                                 (swap! fill-on not)
+                                 (.redraw plotter)))
+        grid-toggle (JCheckBox. "Toggle grid" @grid-on)
+        grid-toggle-listener (proxy [java.awt.event.ActionListener] []
+                               (actionPerformed [ae]
+                                 (swap! grid-on not)
+                                 (.redraw plotter)))
+        panel (JPanel.)
+        frame (JFrame. "Function plotter")
+        ]
+    (doto fill-toggle
+      (.addActionListener fill-toggle-listener))
+    (doto grid-toggle
+      (.addActionListener grid-toggle-listener))
+    (doto panel
+      (.add plotter)
+      (.add fill-toggle)
+      (.add grid-toggle))
+    (doto frame
+      (.setDefaultCloseOperation JFrame/EXIT_ON_CLOSE)
+      (.add panel)
+      (.setSize 800 550)
+      (.setVisible true))
     )
   )
-
