@@ -5,7 +5,7 @@ Much of the code is based on an example from a presentation on Processing here: 
 
 ## Getting it running
 
-This project require Leiningen which can be obtained and installed from here:
+This project require Leiningen which can be obtained and installed from here: http://www.leiningen.org/
 
 Download the project to a local directory and run the following:
 
