@@ -18,8 +18,6 @@
 (def start-y -3.0)
 (def end-y 3.0)
 
-(def zs (atom []))
-
 (def rot-x (atom 0.0))
 (def rot-y (atom 0.0))
 (def last-x (atom 0.0))
@@ -34,8 +32,10 @@
 (def fill-on (atom true))
 (def fill-color (atom [127 0 127]))
 
-(def steps (atom 31))
-
+; These two entities are tightly coupled and their mutations need to be coordinated;
+; need to use refs instead of atoms here.
+(def steps (ref 31))
+(def zs (ref []))
 
 (defn f [x y]
   (Math/sin (+ (* x x) (* y y)))
@@ -46,12 +46,14 @@
 (defn- compute-points []
   (let [range-x (- end-x start-x)
         range-y (- end-y start-y)]
-    (reset! zs
-      (into []
-        (for [i (range (inc @steps))
-              j (range (inc @steps))]
-          (f (+ start-x (* i (/ range-x @steps)))
-             (+ start-y (* j (/ range-y @steps)))))
+    (dosync
+      (ref-set zs
+        (into []
+          (for [i (range (inc @steps))
+                j (range (inc @steps))]
+            (f (+ start-x (* i (/ range-x @steps)))
+               (+ start-y (* j (/ range-y @steps)))))
+          )
         )
       )
     )
@@ -100,18 +102,20 @@
   (check-grid)
   (check-fill)
 
-  (let [range-x (- end-x start-x)
-        range-y (- end-y start-y)]
-    (doseq [j (range @steps)]
-      (begin-shape :quad-strip)
-      (doseq [i (range (inc @steps))]
-        (let [x (+ start-x (* i (/ range-x @steps)))
-              y (+ start-y (* j (/ range-y @steps)))]
-          (vertex x y (@zs (+ i (* j (inc @steps)))))
-          (vertex x (+ y (/ range-y @steps)) (@zs (+ i (* (inc j) (inc @steps)))))
+  (dosync
+    (let [range-x (- end-x start-x)
+          range-y (- end-y start-y)]
+      (doseq [j (range @steps)]
+        (begin-shape :quad-strip)
+        (doseq [i (range (inc @steps))]
+          (let [x (+ start-x (* i (/ range-x @steps)))
+                y (+ start-y (* j (/ range-y @steps)))]
+            (vertex x y (@zs (+ i (* j (inc @steps)))))
+            (vertex x (+ y (/ range-y @steps)) (@zs (+ i (* (inc j) (inc @steps)))))
+            )
           )
+        (end-shape)
         )
-      (end-shape)
       )
     )
   )
@@ -180,16 +184,14 @@
                                (actionPerformed [ae]
                                  (swap! grid-on not)
                                  (.redraw plotter)))
-        plot-point-model (SpinnerNumberModel. @steps 0 100 1)
+        plot-point-model (SpinnerNumberModel. @steps 1 100 1)
         plot-point-spinner (JSpinner. plot-point-model)
-        ; TODO: Figure out how to insure that the applet stops drawing
-        ;       before mutating steps and recomputing zs.
-        ;       As is, there are spurious IndexOutOfBoundsExceptions.
         plot-point-listener (proxy [ChangeListener] []
                               (stateChanged [ce]
                                 (.stop plotter)
-                                (reset! steps (.getNumber plot-point-model))
-                                (compute-points)
+                                (dosync
+                                  (ref-set steps (.getNumber plot-point-model))
+                                  (compute-points))
                                 (.start plotter)))
         panel (JPanel.)
         frame (JFrame. "Function plotter")
