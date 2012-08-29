@@ -2,14 +2,15 @@
   (:gen-class)
   (:import [processing.core PConstants]
            [java.awt.event ActionListener MouseWheelListener]
-           [javax.swing JButton JCheckBox JFrame JPanel])
+           [java.lang Runnable]
+           [javax.swing JButton JCheckBox JFrame JPanel JSpinner SpinnerNumberModel]
+           [javax.swing.event ChangeListener])
   (:use quil.core quil.applet)
   )
 
 (def screen-w 500)
 (def screen-h 500)
 
-(def steps 50)
 (def scale-z 600)
 
 (def start-x -3.0)
@@ -33,9 +34,12 @@
 (def fill-on (atom true))
 (def fill-color (atom [127 0 127]))
 
+(def steps (atom 31))
+
+
 (defn f [x y]
-;  (Math/sin (+ (* x x) (* y y))))
-  (/ (Math/sin (+ (* x x) (* y y))) (+ (* x x) (* y y)))
+  (Math/sin (+ (* x x) (* y y)))
+;  (* 2 (Math/sin (* (+ (* x x) (* y y)) PConstants/PI)) (Math/exp (- (+ (* x x) (* y y)))))
   )
 
 
@@ -44,10 +48,10 @@
         range-y (- end-y start-y)]
     (reset! zs
       (into []
-        (for [i (range (inc steps))
-              j (range (inc steps))]
-          (f (+ start-x (* i (/ range-x steps)))
-             (+ start-y (* j (/ range-y steps)))))
+        (for [i (range (inc @steps))
+              j (range (inc @steps))]
+          (f (+ start-x (* i (/ range-x @steps)))
+             (+ start-y (* j (/ range-y @steps)))))
         )
       )
     )
@@ -88,30 +92,23 @@
 
 (defn setup []
   (smooth)
-  ; TODO: Move this down into the setup of the GUI below
-  (let [applet (current-applet)
-        mouse-wheel-listener (proxy [java.awt.event.MouseWheelListener] []
-                               (mouseWheelMoved [mwe] (mouse-wheel (.getWheelRotation mwe)))
-                               )]
-    (.addMouseWheelListener applet mouse-wheel-listener)
-    )
+  (frame-rate 30)
   (compute-points)
   )
 
 (defn- draw-function-plot []
-  (lights)
   (check-grid)
   (check-fill)
 
   (let [range-x (- end-x start-x)
         range-y (- end-y start-y)]
-    (doseq [j (range steps)]
+    (doseq [j (range @steps)]
       (begin-shape :quad-strip)
-      (doseq [i (range (inc steps))]
-        (let [x (+ start-x (* i (/ range-x steps)))
-              y (+ start-y (* j (/ range-y steps)))]
-          (vertex x y (@zs (+ i (* j (inc steps)))))
-          (vertex x (+ y (/ range-y steps)) (@zs (+ i (* (inc j) (inc steps)))))
+      (doseq [i (range (inc @steps))]
+        (let [x (+ start-x (* i (/ range-x @steps)))
+              y (+ start-y (* j (/ range-y @steps)))]
+          (vertex x y (@zs (+ i (* j (inc @steps)))))
+          (vertex x (+ y (/ range-y @steps)) (@zs (+ i (* (inc j) (inc @steps)))))
           )
         )
       (end-shape)
@@ -129,19 +126,18 @@
   )
 
 (defn draw []
+  (lights)
   (background 0)
   ; Center the results on window
   (translate (/ screen-w 2) (/ screen-h 2) @zoom-z)
 
-  ; Rotation
+  ; Rotate the camera
   (rotate-y (+ @rot-y @dist-x))
   (rotate-x (+ @rot-x @dist-y))
 
   ; Centering around (0, 0);
   (translate (- (/ screen-w 2)) (- (/ screen-h 2)))
 
-  ; Function covers
-  ; 400 x 400 x scaleZ
   ; NOTA BENE: quil only exposes two arities of scale so we need to dive into Java here.
   (.scale (current-applet) screen-w screen-h scale-z)
 
@@ -171,27 +167,46 @@
                         :size [500 500]
                         :target :none
                   )
+        mouse-wheel-listener (proxy [MouseWheelListener] []
+                               (mouseWheelMoved [mwe]
+                                 (mouse-wheel (.getWheelRotation mwe))))
         fill-toggle (JCheckBox. "Toggle fill" @fill-on)
-        fill-toggle-listener (proxy [java.awt.event.ActionListener] []
+        fill-toggle-listener (proxy [ActionListener] []
                                (actionPerformed [ae]
                                  (swap! fill-on not)
                                  (.redraw plotter)))
         grid-toggle (JCheckBox. "Toggle grid" @grid-on)
-        grid-toggle-listener (proxy [java.awt.event.ActionListener] []
+        grid-toggle-listener (proxy [ActionListener] []
                                (actionPerformed [ae]
                                  (swap! grid-on not)
                                  (.redraw plotter)))
+        plot-point-model (SpinnerNumberModel. @steps 0 100 1)
+        plot-point-spinner (JSpinner. plot-point-model)
+        ; TODO: Figure out how to insure that the applet stops drawing
+        ;       before mutating steps and recomputing zs.
+        ;       As is, there are spurious IndexOutOfBoundsExceptions.
+        plot-point-listener (proxy [ChangeListener] []
+                              (stateChanged [ce]
+                                (.stop plotter)
+                                (reset! steps (.getNumber plot-point-model))
+                                (compute-points)
+                                (.start plotter)))
         panel (JPanel.)
         frame (JFrame. "Function plotter")
         ]
+    (doto plotter
+      (.addMouseWheelListener mouse-wheel-listener))
     (doto fill-toggle
       (.addActionListener fill-toggle-listener))
     (doto grid-toggle
       (.addActionListener grid-toggle-listener))
+    (doto plot-point-spinner
+      (.addChangeListener plot-point-listener))
     (doto panel
       (.add plotter)
       (.add fill-toggle)
-      (.add grid-toggle))
+      (.add grid-toggle)
+      (.add plot-point-spinner))
     (doto frame
       (.setDefaultCloseOperation JFrame/EXIT_ON_CLOSE)
       (.add panel)
