@@ -1,9 +1,10 @@
 (ns function-plotter.core
   (:gen-class)
   (:import [processing.core PConstants]
+           [java.awt GridBagConstraints GridBagLayout GridLayout]
            [java.awt.event ActionListener MouseWheelListener]
            [java.lang Runnable]
-           [javax.swing JButton JCheckBox JFrame JPanel JSpinner SpinnerNumberModel]
+           [javax.swing JButton JCheckBox JFrame JLabel JPanel JSpinner SpinnerNumberModel]
            [javax.swing.event ChangeListener])
   (:use quil.core quil.applet)
   )
@@ -149,6 +150,13 @@
   (draw-axes)
   )
 
+; This is a convenience method
+(defn- set-x-and-y! [gbc grid-x grid-y]
+  (set! (. gbc gridx) grid-x)
+  (set! (. gbc gridy) grid-y)
+  gbc
+  )
+
 (defn -main [& args]
   ; I need to get a hold of the raw PApplet object here
   ; in order to be able to add to a JPanel.
@@ -168,7 +176,7 @@
                         :mouse-pressed mouse-pressed
                         :mouse-dragged mouse-dragged
                         :mouse-released mouse-released
-                        :size [500 500]
+                        :size [screen-w screen-h]
                         :target :none
                   )
         mouse-wheel-listener (proxy [MouseWheelListener] []
@@ -184,6 +192,7 @@
                                (actionPerformed [ae]
                                  (swap! grid-on not)
                                  (.redraw plotter)))
+        plot-point-label (JLabel. "Plot points")
         plot-point-model (SpinnerNumberModel. @steps 1 100 1)
         plot-point-spinner (JSpinner. plot-point-model)
         plot-point-listener (proxy [ChangeListener] []
@@ -193,9 +202,14 @@
                                   (ref-set steps (.getNumber plot-point-model))
                                   (compute-points))
                                 (.start plotter)))
-        panel (JPanel.)
+        left-panel (JPanel.)
+        right-panel (JPanel.)
+        layout-constraints (GridBagConstraints.)
+        main-layout (GridBagLayout.)
+        widget-layout (GridBagLayout.)
         frame (JFrame. "Function plotter")
         ]
+    (set! (. layout-constraints fill) GridBagConstraints/HORIZONTAL)
     (doto plotter
       (.addMouseWheelListener mouse-wheel-listener))
     (doto fill-toggle
@@ -204,15 +218,22 @@
       (.addActionListener grid-toggle-listener))
     (doto plot-point-spinner
       (.addChangeListener plot-point-listener))
-    (doto panel
-      (.add plotter)
-      (.add fill-toggle)
-      (.add grid-toggle)
-      (.add plot-point-spinner))
+    (doto left-panel
+      (.add plotter))
+    (doto right-panel
+      (.setLayout widget-layout)
+      (.add plot-point-label (set-x-and-y! layout-constraints 0 0))
+      (.add plot-point-spinner (set-x-and-y! layout-constraints 1 0))
+      (.add fill-toggle (set-x-and-y! layout-constraints 0 1))
+      (.add grid-toggle (set-x-and-y! layout-constraints 1 1))
+      )
     (doto frame
+      (.setLayout main-layout)
       (.setDefaultCloseOperation JFrame/EXIT_ON_CLOSE)
-      (.add panel)
-      (.setSize 800 550)
+      (.add left-panel (set-x-and-y! layout-constraints 0 0))
+      (.add right-panel (set-x-and-y! layout-constraints 1 0))
+;      (.setSize 850 550)
+      (.pack)
       (.setVisible true))
     )
   )
