@@ -1,10 +1,10 @@
 (ns function-plotter.core
   (:gen-class)
   (:import [processing.core PConstants]
-           [java.awt GridBagConstraints GridBagLayout GridLayout]
+           [java.awt Color GridBagConstraints GridBagLayout GridLayout]
            [java.awt.event ActionListener MouseWheelListener]
            [java.lang Runnable]
-           [javax.swing JButton JCheckBox JFrame JLabel JPanel JSpinner SpinnerNumberModel]
+           [javax.swing JButton JCheckBox JColorChooser JFrame JLabel JPanel JSpinner SpinnerNumberModel]
            [javax.swing.event ChangeListener])
   (:use quil.core quil.applet)
   )
@@ -170,7 +170,9 @@
   ;
   ; TODO: Take a look at Seesaw. There is waaaay too much ceremony here.
   ;       In the mean time, IT FRIGGIN' WORKS.
-  (let [plotter (applet :setup setup
+  (let [left-panel (JPanel.)
+        right-panel (JPanel.)
+        plotter (applet :setup setup
                         :draw draw
                         :renderer :opengl
                         :mouse-pressed mouse-pressed
@@ -202,8 +204,22 @@
                                   (ref-set steps (.getNumber plot-point-model))
                                   (compute-points))
                                 (.start plotter)))
-        left-panel (JPanel.)
-        right-panel (JPanel.)
+        fill-button (JButton. "Fill color...")
+        fill-button-listener (proxy [ActionListener] []
+                               (actionPerformed [ae]
+                                 (let [selected-color (JColorChooser/showDialog right-panel "Choose fill color..." (Color. 0 0 0))]
+                                   (if (not (nil? selected-color))
+                                     (reset! fill-color [(.getRed selected-color)
+                                                         (.getGreen selected-color)
+                                                         (.getBlue selected-color)])))))
+        grid-button (JButton. "Grid color...")
+        grid-button-listener (proxy [ActionListener] []
+                               (actionPerformed [ae]
+                                 (let [selected-color (JColorChooser/showDialog right-panel "Choose grid color..." (Color. 0 0 0))]
+                                   (if (not (nil? selected-color))
+                                     (reset! grid-color [(.getRed selected-color)
+                                                         (.getGreen selected-color)
+                                                         (.getBlue selected-color)])))))
         layout-constraints (GridBagConstraints.)
         main-layout (GridBagLayout.)
         widget-layout (GridBagLayout.)
@@ -218,6 +234,10 @@
       (.addActionListener grid-toggle-listener))
     (doto plot-point-spinner
       (.addChangeListener plot-point-listener))
+    (doto fill-button
+      (.addActionListener fill-button-listener))
+    (doto grid-button
+      (.addActionListener grid-button-listener))
     (doto left-panel
       (.add plotter))
     (doto right-panel
@@ -226,6 +246,8 @@
       (.add plot-point-spinner (set-x-and-y! layout-constraints 1 0))
       (.add fill-toggle (set-x-and-y! layout-constraints 0 1))
       (.add grid-toggle (set-x-and-y! layout-constraints 1 1))
+      (.add fill-button (set-x-and-y! layout-constraints 0 2))
+      (.add grid-button (set-x-and-y! layout-constraints 1 2))
       )
     (doto frame
       (.setLayout main-layout)
